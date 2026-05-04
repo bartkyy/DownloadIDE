@@ -1,0 +1,37 @@
+{
+  "name": "ide",
+  "version": "1.0.0",
+  "description": "...",
+  "author": "bartkyy",
+  "main": "main.js",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win"
+  },
+  "build": {
+    "appId": "https://github.com/bartkyy",
+    "win": {
+      "target": "nsis"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "installerIcon": "icon-install.ico",
+      "uninstallerIcon": "icon-uninstall.ico"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer.js",
+      "index.html",
+      "package.json",
+      "package-lock.json",
+      "node_modules/**/*"
+    ]
+  },
+  "devDependencies": {
+    "electron": "^25.0.0",
+    "electron-builder": "^24.0.0"
+  }
+}
