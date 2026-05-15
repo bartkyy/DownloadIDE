@@ -1,6 +1,6 @@
 {
   "name": "ide",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "...",
   "author": "bartkyy",
   "main": "main.js",
@@ -11,7 +11,8 @@
   "build": {
     "appId": "https://github.com/bartkyy",
     "win": {
-      "target": "nsis"
+      "target": "nsis",
+      "icon": "icon.ico"
     },
     "nsis": {
       "oneClick": false,
