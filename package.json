@@ -1,6 +1,6 @@
 {
   "name": "ide",
-  "version": "1.0.1",
+  "version": "1.1.0-beta",
   "description": "...",
   "author": "bartkyy",
   "main": "main.js",
@@ -14,6 +14,12 @@
       "target": "nsis",
       "icon": "icon.ico"
     },
+    "extraResources": [
+        {
+            "from": "kompiler.exe",
+            "to": "kompiler.exe"
+        }
+    ],
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
@@ -22,13 +28,8 @@
       "uninstallerIcon": "icon-uninstall.ico"
     },
     "files": [
-      "main.js",
-      "preload.js",
-      "renderer.js",
-      "index.html",
-      "package.json",
-      "package-lock.json",
-      "node_modules/**/*"
+      "**/*",
+      "kompiler.exe"
     ]
   },
   "devDependencies": {

@@ -1,89 +1,106 @@
 const { app, BrowserWindow, Menu, ipcMain, dialog } = require('electron');
 const path = require('path');
-const fs = require('fs').promises; // Używamy wersji z obietnicami
+const fs = require('fs');
+const { spawn, exec } = require('child_process');
+
+let win;
+// 1. Deklaracja zmiennej globalnej na samej górze
+let currentProjectRoot = null;
+
+const compilerPath = app.isPackaged
+    ? path.join(process.resourcesPath, 'kompiler.exe')
+    : path.join(__dirname, 'kompiler.exe');
 
 function createWindow() {
-  const win = new BrowserWindow({
-    width: 1200,
-    height: 800,
+  win = new BrowserWindow({
+    width: 1200, height: 800,
     icon: path.join(__dirname, 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false
+      contextIsolation: true, nodeIntegration: false
     }
   });
 
-  const template = [
-    {
-      label: 'File',
-      submenu: [
-        { label: 'Otwórz Plik', accelerator: 'CmdOrCtrl+O', click: () => win.webContents.send('menu:open-file') },
-        { label: 'Otwórz Folder', click: () => win.webContents.send('menu:open-folder') },
-        { type: 'separator' },
-        { label: 'Zapisz', accelerator: 'CmdOrCtrl+S', click: () => win.webContents.send('menu:save-file') },
-        { type: 'separator' },
-        { role: 'quit', label: 'Wyjdź' }
-      ]
-    },
+  const menu = Menu.buildFromTemplate([
+    { label: 'File', submenu: [
+      { label: 'Otwórz Plik', click: () => win.webContents.send('menu:open-file') },
+      { label: 'Otwórz Folder', click: () => win.webContents.send('menu:open-folder') },
+      { label: 'Otwórz Projekt', click: () => win.webContents.send('menu:open-project') },
+      { type: 'separator' },
+      { label: 'Zapisz', accelerator: 'CmdOrCtrl+S', click: () => win.webContents.send('menu:save-file') }
+    ]},
     { label: 'Edit', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }] },
     {
-      label: 'View',
-      submenu: [ { role: 'reload' }, { role: 'toggleDevTools' } ]
+    label: 'View',
+    submenu: [
+      { role: 'reload' },
+      { role: 'toggleDevTools' },
+      { type: 'separator' },
+      { label: 'Pokaż/Ukryj Konsolę', accelerator: 'Ctrl+`', click: () => win.webContents.send('menu:toggle-console') }
+    ]
     },
     {
-      label: 'Kompiler',
-      submenu: [{label: 'Coming soon'}]
+      label: 'Kompilator',
+      submenu: [
+        { label: 'Uruchom (F5)', accelerator: 'F5', click: () => win.webContents.send('menu:run-compiler') }
+      ]
     }
-  ];
-
-  const menu = Menu.buildFromTemplate(template);
+  ]);
   Menu.setApplicationMenu(menu);
   win.loadFile('index.html');
 }
 
-// --- OBSŁUGA KOMUNIKACJI (IPC) ---
+// HANDLERY
+ipcMain.handle('set-project-root', (event, folderPath) => {
+    currentProjectRoot = folderPath;
+    console.log("Projekt ustawiony na:", currentProjectRoot);
+    return currentProjectRoot;
+});
 
-// Czytanie zawartości folderu
 ipcMain.handle('dir:read', async (event, dirPath) => {
   try {
-    const files = await fs.readdir(dirPath, { withFileTypes: true });
-    return files.map(f => ({
-      name: f.name,
-      path: path.join(dirPath, f.name),
-      isDirectory: f.isDirectory()
-    }));
-  } catch (err) {
-    console.error(err);
-    return [];
-  }
+    const files = fs.readdirSync(dirPath, { withFileTypes: true });
+    return files.map(f => ({ name: f.name, path: path.join(dirPath, f.name), isDirectory: f.isDirectory() }));
+  } catch (err) { return []; }
 });
 
-// Otwieranie konkretnego pliku
 ipcMain.handle('file:open', async (event, filePath) => {
-  const content = await fs.readFile(filePath, 'utf-8');
-  return { content, filePath, fileName: path.basename(filePath) };
+  return { content: fs.readFileSync(filePath, 'utf8'), filePath, fileName: path.basename(filePath) };
 });
 
-// Wywołanie systemowego okna wyboru pliku
 ipcMain.handle('dialog:open-file', async () => {
-  const { canceled, filePaths } = await dialog.showOpenDialog();
+  const { canceled, filePaths } = await dialog.showOpenDialog({ properties: ['openFile'] });
   if (canceled) return null;
-  const content = await fs.readFile(filePaths[0], 'utf-8');
-  return { content, filePath: filePaths[0], fileName: path.basename(filePaths[0]) };
+  return { content: fs.readFileSync(filePaths[0], 'utf8'), filePath: filePaths[0], fileName: path.basename(filePaths[0]) };
 });
 
-// Wywołanie systemowego okna wyboru folderu
 ipcMain.handle('dialog:open-dir', async () => {
   const { canceled, filePaths } = await dialog.showOpenDialog({ properties: ['openDirectory'] });
-  if (canceled) return null;
-  return filePaths[0];
+  return canceled ? null : filePaths[0];
 });
 
-// Zapisywanie pliku
 ipcMain.handle('file:save', async (event, { filePath, content }) => {
-  await fs.writeFile(filePath, content, 'utf-8');
-  return filePath;
+  fs.writeFileSync(filePath, content, 'utf8');
+  return true;
 });
+
+ipcMain.handle('run-compiler', async (event, code) => {
+    const projectDir = currentProjectRoot || __dirname;
+    const sourceFilePath = path.join(projectDir, 'temp.txt');
+    fs.writeFileSync(sourceFilePath, code, 'utf8');
+
+    return new Promise((resolve) => {
+        const command = `"${compilerPath}" "${sourceFilePath}"`;
+        
+        exec(command, { cwd: projectDir, shell: true }, (err, stdout, stderr) => {
+            if (win) win.focus();
+            resolve(err ? stderr : stdout);
+        });
+    });
+})
 
 app.whenReady().then(createWindow);
+
+app.on('window-all-closed', () => {
+    if (process.platform !== 'darwin') app.quit();
+});
